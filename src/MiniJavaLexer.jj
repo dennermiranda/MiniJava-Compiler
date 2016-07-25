@@ -1,0 +1,274 @@
+options {
+  JAVA_UNICODE_ESCAPE = true;
+}
+
+PARSER_BEGIN(MiniJavaParser)
+import syntaxtree.*;
+import visitor.PrettyPrintVisitor;
+public class MiniJavaParser {
+	public static void main(String[] args) throws ParseException{
+	    if (args.length == 0) {
+	      System.out.println("Sem argumento ate o momento.");
+	    } else if (args.length == 1) {
+	      try {
+	        MiniJavaParser parser = new MiniJavaParser(new java.io.FileReader(args[0]));
+	        Program p = parser.Program();
+	        PrettyPrintVisitor print = new PrettyPrintVisitor();
+	        print.visit(p);
+	        System.out.println("Analise Sintatica OK!");
+	      }  catch (java.io.FileNotFoundException e) {
+	          System.out.println("Arquivo " + args[0] + " nao encontrado.");
+	          return;
+	        }
+	    }
+	  }
+}
+PARSER_END(MiniJavaParser)
+
+TOKEN:
+{
+	< LBRACE: "{" > 
+	| < PUBLIC: "public" > 
+	| < CLASS: "class" >
+	| < STATIC: "static" >  
+	| < VOID: "void" > 
+	| < MAIN: "main" >
+	| < LP: "(" > 
+	| < STRING: "String" >
+	| < COMMA: "," >
+	| < LBRACKETS: "[" >
+	| < RBRACKETS: "]" >
+	| < RP: ")" >
+	| < RBRACE: "}" >
+	| < EXTENDS : "extends" >
+	| < PONTOVIRGULA : ";" >
+	| < RETURN: "return" >	
+	| < INT: "int" >
+	| < BOOLEAN: "boolean" >
+	| < IGUAL: "=" >
+	| < IF: "if" >
+	| < ELSE: "else" >
+	| < WHILE: "while" >
+	| < PRINT: "System.out.println" >
+	| < E: "&&" >
+	| < MENORQUE: "<" >
+	| < MAIORQUE: ">" >
+	| < MAIS: "+" >
+	| < MENOS: "-" >
+	| < VEZES: "*" >
+	| < DIVIDIDO: "/" >
+	| < PONTO: "." >
+	| < LENGTH: "length" >
+	| < TRUE: "true" >
+	| < FALSE: "false" >
+	| < THIS: "this" >
+	| < NEW: "new" >
+	| < EXCLAMACAO: "!" >
+	| < OP: (<MAIS>|<MENOS>|<VEZES>|<DIVIDIDO>|<MENORQUE>|<MAIORQUE>|<IGUAL><IGUAL>) >
+	| < #DIGITO: ["0"-"9"] >
+	| < #LETRA: ["a"-"z"] | ["A"-"Z"] | ["_"] >
+	| < INTEGER_LITERAL: (<DIGITO>)+ >
+	| < ID: (<LETRA>)(<LETRA>|<DIGITO>)* >
+}
+SKIP:
+{
+	< "//" (" ")* (["a" - "z","A" - "Z","0" - "9"," ","_",";"])* "\n" >
+	| < "/*" (["a" - "z","A" - "Z","0" - "9"])* "*/" >
+	| < " " >
+	| < "\t" >
+	| < "\n" >
+	| < "\r" >
+	| < "\r\n" >
+	| < "\f" >
+}
+
+
+
+void Goal() :
+{}
+{
+  MainClass() (ClassDecl())* 
+  <EOF>
+}
+
+Program Program() : {
+  MainClass mc;
+  ClassDeclList cdl = new ClassDeclList();
+  ClassDecl cd;
+} {
+  mc = MainClass()
+  ((cd=ClassDecl() { cdl.addElement(cd); }))*
+  <EOF>
+
+  { return new Program(mc, cdl); }
+}
+
+MainClass MainClass() :
+{
+	Token token1, token2;
+	Statement s1;
+}
+{
+	<CLASS> token1=<ID> <LBRACE> <PUBLIC> <STATIC> <VOID> <MAIN> <LP><STRING><LBRACKETS><RBRACKETS> token2=<ID> <RP> <LBRACE> s1=Statement() <RBRACE> <RBRACE>
+	{return new MainClass(new Identifier(token1.image), new Identifier(token2.image), s1); }
+} 
+
+ClassDecl ClassDecl() :
+{
+	Token token1, token2;
+	MethodDeclList mdl = new MethodDeclList();
+	VarDeclList vdl = new VarDeclList();
+	MethodDecl md = new MethodDecl();
+	VarDecl vd = new VarDecl();
+}
+{
+	<CLASS> token1=<ID> <LBRACE> 
+	(
+	(vd = VarDecl() { vdl.addElement(vd); })* (md = MethodDecl() { mdl.addElement(md); })* <RBRACE> 
+	{return new ClassDeclSimple(new Identifier (token1.image), vdl, mdl);}
+	| 
+	<CLASS> token2=<ID> <EXTENDS> <ID> <LBRACE> (VarDecl())* (MethodDecl())* <RBRACE>
+	{return new ClassDeclExtends(new Identifier (token1.image), new Identifier (token2.image), vdl, mdl);}
+	)
+}
+
+VarDecl VarDecl() :
+{
+	Type t;
+	Token token;
+}
+{
+	t=Type() token=<ID> <PONTOVIRGULA>
+	{return new VarDecl(t, new Identifier(token.image));}
+}
+
+MethodDecl MethodDecl() :
+{
+	Type t;
+	Token token;
+	FormalList fl;
+	VarDeclList vdl = new VarDeclList();
+	VarDecl vd;
+	StatementList sl = new StatementList();
+	Statement s;
+	Exp exp;
+}
+{
+	<PUBLIC> t=Type() token=<ID> <LP> fl=FormalList() <RP> <LBRACE> (  ( LOOKAHEAD(2) vd = VarDecl() { vdl.addElement(vd); })* (s = Statement() { sl.addElement(s); })* ) <RETURN> exp=Exp() <PONTOVIRGULA> <RBRACE>
+	{return new MethodDecl(t, new Identifier(token.image), fl, vdl, sl, exp);}
+}
+
+FormalList FormalList()  : 
+{
+  	Type t;
+  	Token token; 
+  	FormalList fl = new FormalList();
+} 
+{
+  	(t=Type() token=<ID> { fl.addElement(new Formal(t, new Identifier(token.image))); }
+    	( (<COMMA> t=Type() token=<ID> { fl.addElement(new Formal(t, new Identifier(token.image))); })* )
+  )
+  	{ return fl; }
+}
+
+void Formal() :
+{}
+{
+	<COMMA> Type() <ID>
+}
+
+Type Type() :
+{
+	Type t;
+	Token token;
+}
+{
+	(
+	<INT> { t = new IntegerType(); }// Tirando o vetor <LBRACKETS><RBRACKETS> 
+	| <BOOLEAN> { t = new BooleanType(); }
+	| token=<ID> { t = new IdentifierType(token.image); }
+	)
+	{ return t; }
+}
+
+Statement Statement() :
+{
+	Token token;
+	Statement s1,s2,s3;
+	Identifier id;
+	Exp exp1, exp2;
+}
+{
+	
+	(
+	<LBRACE> { s3 = new StatementList(); }( s1 = Statement() {((StatementList) s3).addElement(s1);} )* <RBRACE>
+	| <IF> <LP> exp1 = Exp()<RP> s1=Statement() <ELSE> s2=Statement() { s3=new If(exp1,s1,s2); }
+	| <WHILE> <LP> exp1 = Exp() <RP> s1=Statement() { s3=new While(exp1,s1); }
+	| <PRINT><LP>exp1 = Exp()<RP><PONTOVIRGULA> { s3 = new Print(exp1); } 
+	| token=<ID> { id=new Identifier(token.image);} (<IGUAL> exp1=Exp()<PONTOVIRGULA> { s3 = new Assign(id,exp1); }
+			| <LBRACKETS>exp1 = Exp()<RBRACKETS> <IGUAL> exp2 = Exp()<PONTOVIRGULA> { s3 = new ArrayAssign(id, exp1, exp2); }
+			)
+	)
+	{ return s3; }
+}
+
+Exp Exp() :
+{
+	Exp exp;
+}
+{
+	exp = ExpPrime() {return ExpPost(e);}
+}
+
+Exp ExpPrime() :
+{
+	Identifier id;
+	Exp exp;
+	Token token;
+}
+{
+	token = < INTEGER_LITERAL > {return new IntegerLiteral(Integer.parseInt(token.image));}
+	| < TRUE > {return new True();}
+	| < FALSE > {return new False();}
+	| id = Identifier() {return new IdentifierExp(id.toString());}
+	| < THIS > {return new This();}
+	| LOOKAHEAD(2) < NEW > < INT > < LBRACKETS > exp = Exp() < RBRACKETS > {return new NewArray(exp);}
+	| < NEW > id = Identifier() < LP > < RP > {return new NewObject(id);}
+	| < EXCLAMACAO > exp = Exp() {return new Not(exp);}
+	| < LP > exp = Exp() < RP > {return ExpPost(exp);}
+}
+
+Exp ExpPost(Exp exp1) :
+{
+	Exp exp2;
+	Identifier id;
+	ExpList el;
+}
+{
+	< E > exp2 = Exp() {return new And(exp1,exp2);}
+	| < MENORQUE > exp2 = Exp() {return new LessThan(exp1,exp2);}
+	| < MAIS > exp2 = Exp() {return new Plus(exp1,exp2);}
+	| < MENOS >  exp2 = Exp() {return new Minus(exp1,exp2);}
+	| < VEZES > exp2 = Exp() {return new Times(exp1,exp2);}
+	| LOOKAHEAD(2) < PONTO > < LENGTH > {return new ArrayLength(exp1);}
+	| < LBRACKETS > exp2 = Exp() < RBRACKETS > {return ExpPost(exp2);}
+	| < PONTO > id = Identifier() < LP > el = ExpList() < RP > {return new Call(exp1,id,el);}
+	| {return exp1;}
+}
+
+ExpList ExpList() :
+{ 
+	ExpList el = new ExpList();
+	Exp exp1;
+}
+{
+	exp1 = Exp() {el.addElement(e);} (<COMMA> exp1 = Exp() {el.addElement(exp1);})*
+{return el;}}
+
+Identifier Identifier() :
+{
+	Token token;
+}
+{ token = < ID >
+
+{return new Identifier(token.image);}}

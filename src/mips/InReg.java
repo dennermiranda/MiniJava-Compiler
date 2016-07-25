@@ -1,0 +1,1 @@
+package mips;import temp.Temp;//import tree.Exp1;public class InReg extends frame.Access {    Temp temp;    InReg(Temp t) {	temp = t;    }    public tree.Exp1 exp(tree.Exp1 fp) {        return new tree.TEMP(temp);    }    public String toString() {        return temp.toString();    }	}
